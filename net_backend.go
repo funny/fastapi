@@ -28,8 +28,14 @@ func (f *msgFormat) DecodeMessage(msg []byte) (interface{}, error) {
 	return msg2, nil
 }
 
-type VirtualConnHandler interface {
+type ConnHandler interface {
 	HandleConn(*fastway.Conn)
+}
+
+type ConnHandlerFunc func(*fastway.Conn)
+
+func (f ConnHandlerFunc) HandleConn(conn *fastway.Conn) {
+	f(conn)
 }
 
 type Backend struct {
@@ -72,7 +78,7 @@ func (backend *Backend) Serve(handler link.Handler) {
 	}
 }
 
-func (backend *Backend) ServeConn(handler VirtualConnHandler) {
+func (backend *Backend) ServeConn(handler ConnHandler) {
 	defer backend.endpoint.Close()
 	for {
 		conn, err := backend.endpoint.Accept()
