@@ -10,6 +10,7 @@ import (
 type IServer interface {
 	Init(initializer func(Service))
 	Serve(link.Handler) error
+	Dispatch(*link.Session, Message)
 	Stop()
 	GetSession(uint64) *link.Session
 }
