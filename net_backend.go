@@ -38,6 +38,8 @@ func (f ConnHandlerFunc) HandleConn(conn *fastway.Conn) {
 	f(conn)
 }
 
+var _ IServer = (*Backend)(nil)
+
 type Backend struct {
 	endpoint *fastway.EndPoint
 	services [256]Service
@@ -63,30 +65,32 @@ func (app *App) DialBackend(network, addr string, cfg fastway.EndPointCfg) (back
 	return
 }
 
-func (backend *Backend) Close() {
+func (backend *Backend) Stop() {
 	backend.endpoint.Close()
 }
 
-func (backend *Backend) Serve(handler link.Handler) {
+func (backend *Backend) Serve(handler link.Handler) error {
 	defer backend.endpoint.Close()
 	for {
 		conn, err := backend.endpoint.Accept()
 		if err != nil {
-			return
+			return err
 		}
 		go handler.HandleSession(conn.Session)
 	}
+	return nil
 }
 
-func (backend *Backend) ServeConn(handler ConnHandler) {
+func (backend *Backend) ServeConn(handler ConnHandler) error {
 	defer backend.endpoint.Close()
 	for {
 		conn, err := backend.endpoint.Accept()
 		if err != nil {
-			return
+			return err
 		}
 		go handler.HandleConn(conn)
 	}
+	return nil
 }
 
 func (backend *Backend) GetSession(sessionID uint64) *link.Session {

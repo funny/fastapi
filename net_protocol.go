@@ -8,6 +8,7 @@ import (
 	"net"
 
 	"github.com/funny/link"
+	"github.com/funny/slab"
 )
 
 type protocol struct {
@@ -19,7 +20,7 @@ func (p *protocol) NewCodec(rw io.ReadWriter) (link.Codec, error) {
 	c := &Codec{
 		conn:        rw.(net.Conn),
 		reader:      bufio.NewReaderSize(rw, p.config.ReadBufSize),
-		allocator:   p.config.Allocator,
+		pool:        p.config.Pool,
 		maxRecvSize: p.config.MaxRecvSize,
 		maxSendSize: p.config.MaxSendSize,
 		newMessage:  p.newMessage,
@@ -35,7 +36,7 @@ type Codec struct {
 	headData    [packetHeadSize]byte
 	conn        net.Conn
 	reader      *bufio.Reader
-	allocator   Allocator
+	pool        slab.Pool
 	maxRecvSize int
 	maxSendSize int
 	newMessage  func(byte, byte) (Message, error)
@@ -56,7 +57,7 @@ func (c *Codec) Receive() (msg interface{}, err error) {
 		return nil, DecodeError{fmt.Sprintf("Too Large Receive Packet Size: %d", packetSize)}
 	}
 
-	packet := c.allocator.Alloc(packetSize)
+	packet := c.pool.Alloc(packetSize)
 
 	if _, err = io.ReadFull(c.reader, packet); err == nil {
 		msg1, err1 := c.newMessage(c.headData[4], c.headData[5])
@@ -75,7 +76,7 @@ func (c *Codec) Receive() (msg interface{}, err error) {
 		}
 	}
 
-	c.allocator.Free(packet)
+	c.pool.Free(packet)
 	return
 }
 
@@ -88,7 +89,7 @@ func (c *Codec) Send(m interface{}) (err error) {
 		panic(EncodeError{fmt.Sprintf("Too Large Send Packet Size: %d", packetSize)})
 	}
 
-	packet := c.allocator.Alloc(packetHeadSize + packetSize)
+	packet := c.pool.Alloc(packetHeadSize + packetSize)
 	binary.LittleEndian.PutUint32(packet, uint32(packetSize))
 	packet[4] = msg.ServiceID()
 	packet[5] = msg.MessageID()
@@ -103,7 +104,7 @@ func (c *Codec) Send(m interface{}) (err error) {
 	}()
 
 	_, err = c.conn.Write(packet)
-	c.allocator.Free(packet)
+	c.pool.Free(packet)
 	return
 }
 

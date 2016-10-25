@@ -4,7 +4,15 @@ import (
 	"fmt"
 
 	"github.com/funny/link"
+	"github.com/funny/slab"
 )
+
+type IServer interface {
+	Init(initializer func(Service))
+	Serve(link.Handler) error
+	Stop()
+	GetSession(uint64) *link.Session
+}
 
 type Service interface {
 	ServiceID() byte
@@ -23,27 +31,12 @@ type Message interface {
 }
 
 type Config struct {
-	Allocator    Allocator
+	Pool         slab.Pool
 	ReadBufSize  int
 	SendChanSize int
 	MaxRecvSize  int
 	MaxSendSize  int
 }
-
-// Allocator provide a way to pooling memory.
-// Reference: https://github.com/funny/slab
-type Allocator interface {
-	Alloc(int) []byte
-	Free([]byte)
-}
-
-type nonAllocator struct{}
-
-func (_ nonAllocator) Alloc(size int) []byte {
-	return make([]byte, size)
-}
-
-func (_ nonAllocator) Free(_ []byte) {}
 
 type EncodeError struct {
 	Message interface{}

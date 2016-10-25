@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/funny/link"
+	"github.com/funny/slab"
 )
 
 type APIs map[byte][2]interface{}
@@ -26,7 +27,7 @@ func New() *App {
 	return &App{
 		sessionType: reflect.TypeOf(&link.Session{}),
 		Config: Config{
-			Allocator:    nonAllocator{},
+			Pool:         &slab.NoPool{},
 			ReadBufSize:  1024,
 			SendChanSize: 1024,
 			MaxRecvSize:  64 * 1024,

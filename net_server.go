@@ -8,6 +8,8 @@ import (
 	"github.com/funny/link"
 )
 
+var _ IServer = (*Server)(nil)
+
 type Server struct {
 	*link.Server
 	services [256]Service
