@@ -10,7 +10,7 @@ import (
 
 type APIs map[byte][2]interface{}
 
-type Service interface {
+type Provider interface {
 	APIs() APIs
 }
 
@@ -35,7 +35,7 @@ func New() *App {
 	}
 }
 
-func (app *App) Register(id byte, service Service) {
+func (app *App) Register(id byte, service Provider) {
 	typeOfService := reflect.TypeOf(service)
 
 	if app.services[id] != nil {

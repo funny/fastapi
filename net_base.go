@@ -6,7 +6,7 @@ import (
 	"github.com/funny/link"
 )
 
-type FullService interface {
+type Service interface {
 	ServiceID() byte
 	NewRequest(byte) Message
 	NewResponse(byte) Message

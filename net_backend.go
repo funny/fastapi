@@ -8,31 +8,78 @@ import (
 	"github.com/funny/link"
 )
 
-type Backend struct {
-	endpoint *fastway.EndPoint
-	services [256]FullService
+type msgFormat struct {
+	newMessage func(byte, byte) (Message, error)
 }
 
-func (app *App) NewBackend(ep *fastway.EndPoint) *Backend {
-	backend := new(Backend)
-	backend.endpoint = ep
+func (f *msgFormat) EncodeMessage(msg interface{}) ([]byte, error) {
+	msg2 := msg.(Message)
+	buf := make([]byte, msg2.BinarySize())
+	msg2.MarshalPacket(buf)
+	return buf, nil
+}
+
+func (f *msgFormat) DecodeMessage(msg []byte) (interface{}, error) {
+	msg2, err := f.newMessage(msg[0], msg[1])
+	if err != nil {
+		return nil, err
+	}
+	msg2.UnmarshalPacket(msg[2:])
+	return msg2, nil
+}
+
+type VirtualConnHandler interface {
+	HandleConn(*fastway.Conn)
+}
+
+type Backend struct {
+	endpoint *fastway.EndPoint
+	services [256]Service
+}
+
+func (app *App) DialBackend(network, addr string, cfg fastway.EndPointCfg) (backend *Backend, err error) {
+	backend = new(Backend)
+
+	cfg.MsgFormat = &msgFormat{
+		newMessage: backend.newMsg,
+	}
+
+	backend.endpoint, err = fastway.DialServer(network, addr, cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	for i, s := range app.services {
 		if s != nil {
-			backend.services[i] = reflect.New(s).Interface().(FullService)
+			backend.services[i] = reflect.New(s).Interface().(Service)
 		}
 	}
-	return backend
+	return
+}
+
+func (backend *Backend) Close() {
+	backend.endpoint.Close()
 }
 
 func (backend *Backend) Serve(handler link.Handler) {
 	defer backend.endpoint.Close()
 	for {
-		// TODO: register connID and remoteID
-		session, _, _, err := backend.endpoint.Accept()
+		conn, err := backend.endpoint.Accept()
 		if err != nil {
 			return
 		}
-		go handler.HandleSession(session)
+		go handler.HandleSession(conn.Session)
+	}
+}
+
+func (backend *Backend) ServeConn(handler VirtualConnHandler) {
+	defer backend.endpoint.Close()
+	for {
+		conn, err := backend.endpoint.Accept()
+		if err != nil {
+			return
+		}
+		go handler.HandleConn(conn)
 	}
 }
 
@@ -40,7 +87,7 @@ func (backend *Backend) GetSession(sessionID uint64) *link.Session {
 	return backend.endpoint.GetSession(sessionID)
 }
 
-func (backend *Backend) Init(initializer func(FullService)) {
+func (backend *Backend) Init(initializer func(Service)) {
 	for _, s := range backend.services {
 		if s != nil {
 			initializer(s)

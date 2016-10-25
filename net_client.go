@@ -10,7 +10,7 @@ import (
 
 type Client struct {
 	*Config
-	services [256]FullService
+	services [256]Service
 	protocol *protocol
 }
 
@@ -20,7 +20,7 @@ func (app *App) NewClient() *Client {
 	}
 	for i, s := range app.services {
 		if s != nil {
-			client.services[i] = reflect.New(s).Interface().(FullService)
+			client.services[i] = reflect.New(s).Interface().(Service)
 		}
 	}
 	client.protocol = &protocol{&app.Config, client.newMsg}
@@ -40,7 +40,7 @@ func (client *Client) NewSession(conn net.Conn) *link.Session {
 	return link.NewSession(codec, client.SendChanSize)
 }
 
-func (client *Client) Init(initializer func(FullService)) {
+func (client *Client) Init(initializer func(Service)) {
 	for _, s := range client.services {
 		if s != nil {
 			initializer(s)

@@ -10,7 +10,7 @@ import (
 
 type Server struct {
 	*link.Server
-	services [256]FullService
+	services [256]Service
 }
 
 func (app *App) Listen(network, address string) (*Server, error) {
@@ -26,13 +26,13 @@ func (app *App) NewServer(listener net.Listener) *Server {
 	server.Server = link.NewServer(listener, &protocol{&app.Config, server.newMsg}, app.Config.SendChanSize)
 	for i, s := range app.services {
 		if s != nil {
-			server.services[i] = reflect.New(s).Interface().(FullService)
+			server.services[i] = reflect.New(s).Interface().(Service)
 		}
 	}
 	return server
 }
 
-func (server *Server) Init(initializer func(FullService)) {
+func (server *Server) Init(initializer func(Service)) {
 	for _, s := range server.services {
 		if s != nil {
 			initializer(s)
