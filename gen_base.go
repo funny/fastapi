@@ -9,6 +9,8 @@ import (
 	"github.com/funny/slab"
 )
 
+var sessionType = reflect.TypeOf((*link.Session)(nil))
+
 type APIs map[byte][2]interface{}
 
 type Provider interface {
@@ -16,8 +18,6 @@ type Provider interface {
 }
 
 type App struct {
-	name         string
-	sessionType  reflect.Type
 	serviceTypes []*ServiceType
 	services     [256]reflect.Type
 	Config
@@ -25,7 +25,6 @@ type App struct {
 
 func New() *App {
 	return &App{
-		sessionType: reflect.TypeOf(&link.Session{}),
 		Config: Config{
 			Pool:         &slab.NoPool{},
 			ReadBufSize:  1024,
@@ -52,9 +51,8 @@ func (app *App) Register(id byte, service Provider) {
 	app.services[id] = typeOfService.Elem()
 
 	serviceType := &ServiceType{
-		id:          id,
-		t:           typeOfService,
-		sessionType: app.sessionType,
+		id: id,
+		t:  typeOfService,
 	}
 
 	for id, api := range service.APIs() {
@@ -74,12 +72,11 @@ func (app *App) Services() []*ServiceType {
 }
 
 type ServiceType struct {
-	id          byte
-	t           reflect.Type
-	sessionType reflect.Type
-	requests    []*MessageType
-	responses   []*MessageType
-	handlers    []*HandlerMethod
+	id        byte
+	t         reflect.Type
+	requests  []*MessageType
+	responses []*MessageType
+	handlers  []*HandlerMethod
 }
 
 func (service *ServiceType) registerReq(id byte, req interface{}) {
@@ -132,7 +129,7 @@ func (service *ServiceType) registerReq(id byte, req interface{}) {
 			Name:        method.Name,
 			ReqType:     reqType,
 			RspType:     rspType,
-			NeedSession: method.Type.In(1) == service.sessionType,
+			NeedSession: method.Type.In(1) == sessionType,
 		})
 		break
 	}
@@ -163,10 +160,6 @@ func (service *ServiceType) ID() byte {
 
 func (service *ServiceType) Type() reflect.Type {
 	return service.t.Elem()
-}
-
-func (service *ServiceType) SessionType() reflect.Type {
-	return service.sessionType
 }
 
 func (service *ServiceType) Package() string {

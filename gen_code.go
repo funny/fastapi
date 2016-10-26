@@ -12,10 +12,8 @@ import (
 	"github.com/funny/fastbin"
 )
 
-func GenCode(apps ...*App) {
-	if len(apps) == 0 {
-		panic("fastapi: len(apps) == 0")
-	}
+func GenCode(app *App, apps ...*App) {
+	apps = append(apps, app)
 
 	gopath := os.Getenv("GOPATH")
 	if gopath == "" {
