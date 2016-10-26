@@ -4,8 +4,10 @@
 //
 package module1
 
-import "github.com/funny/fastapi"
-import link "github.com/funny/link"
+import (
+	"github.com/funny/fastapi"
+	"github.com/funny/link"
+)
 
 func (_ *Service) ServiceID() byte {
 	return 1

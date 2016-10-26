@@ -7,7 +7,10 @@ var appTemplate = `
 //
 package {{Package}}
 
-import "github.com/funny/fastapi"
+import (
+	"github.com/funny/link"
+	"github.com/funny/fastapi"
+)
 
 {{range .Imports}}
 import {{.Name}} "{{.Path}}"
@@ -39,7 +42,7 @@ func (_ *{{.Name}}) NewResponse(id byte) (fastapi.Message) {
 	return nil
 }
 
-func (s *{{.Name}}) HandleRequest({{if .SessionType}}session {{.SessionType}}, {{end}}req fastapi.Message) {
+func (s *{{.Name}}) HandleRequest(session *link.Session, req fastapi.Message) {
 	switch req.MessageID() {
 	{{range .Handlers}}
 	case {{.ID}}:

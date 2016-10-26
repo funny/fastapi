@@ -71,7 +71,6 @@ func (info *Package) AddService(service *ServiceType) {
 		}
 	}
 	info.Services = append(info.Services, service)
-	info.Import(sessionType.Elem())
 }
 
 func (info *Package) AddMessage(message *MessageType) {
