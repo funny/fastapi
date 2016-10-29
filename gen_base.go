@@ -6,7 +6,6 @@ import (
 	"reflect"
 
 	"github.com/funny/link"
-	"github.com/funny/slab"
 )
 
 var sessionType = reflect.TypeOf((*link.Session)(nil))
@@ -15,24 +14,6 @@ type APIs map[byte][2]interface{}
 
 type Provider interface {
 	APIs() APIs
-}
-
-type App struct {
-	serviceTypes []*ServiceType
-	services     [256]reflect.Type
-	Config
-}
-
-func New() *App {
-	return &App{
-		Config: Config{
-			Pool:         &slab.NoPool{},
-			ReadBufSize:  1024,
-			SendChanSize: 1024,
-			MaxRecvSize:  64 * 1024,
-			MaxSendSize:  64 * 1024,
-		},
-	}
 }
 
 func (app *App) Register(id byte, service Provider) {
@@ -48,7 +29,7 @@ func (app *App) Register(id byte, service Provider) {
 		}
 	}
 
-	app.services[id] = typeOfService.Elem()
+	app.services[id] = service
 
 	serviceType := &ServiceType{
 		id: id,
@@ -67,7 +48,7 @@ func (app *App) Register(id byte, service Provider) {
 	app.serviceTypes = append(app.serviceTypes, serviceType)
 }
 
-func (app *App) Services() []*ServiceType {
+func (app *App) ServiceTypes() []*ServiceType {
 	return app.serviceTypes
 }
 

@@ -51,7 +51,7 @@ func saveCode(dir, filename string, code []byte) {
 	file.Close()
 }
 
-func genPackage(pkg *Package) (code []byte) {
+func genPackage(pkg *packageInfo) (code []byte) {
 	tpl := template.Must(
 		template.New("fastapi").Funcs(template.FuncMap{
 			"Package": func() string {

@@ -5,15 +5,15 @@ import (
 	"strings"
 )
 
-func packages(apps []*App) map[string]*Package {
-	result := make(map[string]*Package)
+func packages(apps []*App) map[string]*packageInfo {
+	result := make(map[string]*packageInfo)
 
 	for _, app := range apps {
 		for _, serviceType := range app.serviceTypes {
 			pkgPath := serviceType.Type().PkgPath()
 			pkg, exists := result[pkgPath]
 			if !exists {
-				pkg = &Package{
+				pkg = &packageInfo{
 					Path: pkgPath,
 				}
 				result[pkgPath] = pkg
@@ -34,19 +34,19 @@ func packages(apps []*App) map[string]*Package {
 	return result
 }
 
-type Package struct {
+type packageInfo struct {
 	Path     string
-	Imports  []importInfo
+	Imports  []ImportInfo
 	Services []*ServiceType
 	Messages []*MessageType
 }
 
-type importInfo struct {
+type ImportInfo struct {
 	Name string
 	Path string
 }
 
-func (info *Package) Import(t reflect.Type) {
+func (info *packageInfo) Import(t reflect.Type) {
 	if t != nil {
 		pkgPath := t.PkgPath()
 		typeName := t.String()
@@ -56,7 +56,7 @@ func (info *Package) Import(t reflect.Type) {
 					return
 				}
 			}
-			info.Imports = append(info.Imports, importInfo{
+			info.Imports = append(info.Imports, ImportInfo{
 				strings.Split(typeName, ".")[0],
 				pkgPath,
 			})
@@ -64,7 +64,7 @@ func (info *Package) Import(t reflect.Type) {
 	}
 }
 
-func (info *Package) AddService(service *ServiceType) {
+func (info *packageInfo) AddService(service *ServiceType) {
 	for _, s := range info.Services {
 		if s.t == service.t {
 			return
@@ -73,7 +73,7 @@ func (info *Package) AddService(service *ServiceType) {
 	info.Services = append(info.Services, service)
 }
 
-func (info *Package) AddMessage(message *MessageType) {
+func (info *packageInfo) AddMessage(message *MessageType) {
 	for _, m := range info.Messages {
 		if m.t == message.t {
 			return

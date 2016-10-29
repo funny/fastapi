@@ -5,9 +5,11 @@ import (
 	"log"
 
 	"github.com/funny/fastapi"
-	"github.com/funny/fastapi/example/fastapi_toy/module1"
 	"github.com/funny/fastbin"
-	"github.com/funny/link"
+)
+
+import (
+	"github.com/funny/fastapi/example/fastapi_toy/module1"
 )
 
 func main() {
@@ -23,41 +25,29 @@ func main() {
 		return
 	}
 
-	server, err := app.Listen("tcp", "0.0.0.0:0")
-	checkErr(err)
-	go server.Serve(link.HandlerFunc(func(session *link.Session) {
-		serverSessionLoop(server, session)
-	}))
-
-	client := app.NewClient()
-	addr := server.Listener().Addr().String()
-	session, err := client.Dial("tcp", addr)
-	checkErr(err)
-	clientSessionLoop(session)
-}
-
-func serverSessionLoop(server *fastapi.Server, session *link.Session) {
-	for {
-		msg, err := session.Receive()
-		checkErr(err)
-		server.Dispatch(session, msg.(fastapi.Message))
+	server, err := app.ListenAndServe("tcp", "0.0.0.0:0")
+	if err != nil {
+		log.Fatal("setup server failed:", err)
 	}
-}
 
-func clientSessionLoop(session *link.Session) {
+	client, err := app.Dial("tcp", server.Listener().Addr().String())
+	if err != nil {
+		log.Fatal("setup client failed:", err)
+	}
+
 	for i := 0; i < 10; i++ {
-		err := session.Send(&module1.AddReq{i, i})
-		checkErr(err)
+		err := client.Send(&module1.AddReq{i, i})
+		if err != nil {
+			log.Fatal("send failed:", err)
+		}
 
-		rsp, err := session.Receive()
-		checkErr(err)
+		rsp, err := client.Receive()
+		if err != nil {
+			log.Fatal("recv failed:", err)
+		}
 
 		log.Printf("AddRsp: %d", rsp.(*module1.AddRsp).C)
 	}
-}
 
-func checkErr(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
+	server.Stop()
 }
