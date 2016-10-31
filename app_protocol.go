@@ -119,8 +119,8 @@ func (c *codec) Send(m interface{}) (err error) {
 
 	func() {
 		defer func() {
-			if err := recover(); err != nil {
-				err = EncodeError{err}
+			if panicErr := recover(); panicErr != nil {
+				err = EncodeError{panicErr}
 			}
 		}()
 		msg.MarshalPacket(packet[packetHeadSize:])
@@ -139,20 +139,32 @@ type msgFormat struct {
 	newMessage func(byte, byte) (Message, error)
 }
 
-func (f *msgFormat) EncodeMessage(msg interface{}) ([]byte, error) {
+func (f *msgFormat) EncodeMessage(msg interface{}) (buf []byte, err error) {
+	defer func() {
+		if panicErr := recover(); panicErr != nil {
+			buf = nil
+			err = EncodeError{panicErr}
+		}
+	}()
 	msg2 := msg.(Message)
-	buf := make([]byte, 2+msg2.BinarySize())
+	buf = make([]byte, 2+msg2.BinarySize())
 	buf[0] = msg2.ServiceID()
 	buf[1] = msg2.MessageID()
 	msg2.MarshalPacket(buf[2:])
-	return buf, nil
+	return
 }
 
-func (f *msgFormat) DecodeMessage(msg []byte) (interface{}, error) {
-	msg2, err := f.newMessage(msg[0], msg[1])
-	if err != nil {
-		return nil, err
+func (f *msgFormat) DecodeMessage(buf []byte) (msg interface{}, err error) {
+	defer func() {
+		if panicErr := recover(); panicErr != nil {
+			err = DecodeError{panicErr}
+		}
+	}()
+	var msg2 Message
+	msg2, err = f.newMessage(buf[0], buf[1])
+	if err == nil {
+		msg2.UnmarshalPacket(buf[2:])
+		msg = msg2
 	}
-	msg2.UnmarshalPacket(msg[2:])
-	return msg2, nil
+	return
 }
