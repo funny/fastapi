@@ -25,12 +25,12 @@ func main() {
 		return
 	}
 
-	server, err := app.ListenAndServe("tcp", "0.0.0.0:0")
+	err := app.ListenAndServe("tcp", "0.0.0.0:0")
 	if err != nil {
 		log.Fatal("setup server failed:", err)
 	}
 
-	client, err := app.Dial("tcp", server.Listener().Addr().String())
+	client, err := app.Dial("tcp", app.LastServerAddr().String())
 	if err != nil {
 		log.Fatal("setup client failed:", err)
 	}
@@ -49,5 +49,5 @@ func main() {
 		log.Printf("AddRsp: %d", rsp.(*module1.AddRsp).C)
 	}
 
-	server.Stop()
+	app.Stop()
 }

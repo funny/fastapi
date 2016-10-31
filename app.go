@@ -14,14 +14,19 @@ import (
 
 var ErrAppStopped = errors.New("app stopped")
 
-type Transaction interface {
+type Handler interface {
+	InitSession(*link.Session) error
 	Transaction(*link.Session, func())
 }
 
-type noTrans struct {
+type noHandler struct {
 }
 
-func (t *noTrans) Transaction(session *link.Session, work func()) {
+func (t *noHandler) InitSession(session *link.Session) error {
+	return nil
+}
+
+func (t *noHandler) Transaction(session *link.Session, work func()) {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Println("Unhandled fastapi error:", err)
@@ -40,7 +45,7 @@ type App struct {
 	SendChanSize int
 	MaxRecvSize  int
 	MaxSendSize  int
-	Transaction  Transaction
+	Handler      Handler
 
 	stopMutex sync.RWMutex
 	stopped   bool
@@ -56,7 +61,8 @@ func New() *App {
 		SendChanSize: 1024,
 		MaxRecvSize:  64 * 1024,
 		MaxSendSize:  64 * 1024,
-		Transaction:  &noTrans{},
+		Handler:      &noHandler{},
+		clients:      link.NewChannel(),
 	}
 }
 
@@ -168,12 +174,17 @@ func (app *App) ServeFastway(conn net.Conn, cfg fastway.EndPointCfg) error {
 
 func (app *App) HandleSession(session *link.Session) {
 	defer session.Close()
+
+	if err := app.Handler.InitSession(session); err != nil {
+		return
+	}
+
 	for {
 		msg, err := session.Receive()
 		if err != nil {
 			break
 		}
-		app.Transaction.Transaction(session, func() {
+		app.Handler.Transaction(session, func() {
 			req := msg.(Message)
 			app.services[req.ServiceID()].(Service).HandleRequest(session, req)
 		})
@@ -189,7 +200,7 @@ func (app *App) Stop() {
 	}
 	app.stopped = true
 
-	app.clients.Fetch(func(client *link.Session) {
+	app.clients.FetchAndRemove(func(client *link.Session) {
 		client.Close()
 	})
 
@@ -200,4 +211,10 @@ func (app *App) Stop() {
 	for _, endpoint := range app.endpoints {
 		endpoint.Close()
 	}
+}
+
+func (app *App) LastServerAddr() net.Addr {
+	app.stopMutex.RLock()
+	defer app.stopMutex.RUnlock()
+	return app.servers[len(app.servers)-1].Listener().Addr()
 }
