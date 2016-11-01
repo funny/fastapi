@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
 
 	"github.com/funny/fastapi"
 	"github.com/funny/fastapi/example/fastapi_toy/module1"
@@ -48,4 +49,7 @@ func main() {
 	}
 
 	server.Stop()
+
+	log.Printf("============")
+	app.TimeRecoder().WriteCSV(os.Stderr)
 }

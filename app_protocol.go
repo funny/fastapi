@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	"github.com/funny/link"
-	"github.com/funny/slab"
 )
 
 func (app *App) newClientCodec(rw io.ReadWriter) (link.Codec, error) {
@@ -21,12 +21,10 @@ func (app *App) newServerCodec(rw io.ReadWriter) (link.Codec, error) {
 
 func (app *App) newCodec(rw io.ReadWriter, newMessage func(byte, byte) (Message, error)) link.Codec {
 	c := &codec{
-		conn:        rw.(net.Conn),
-		reader:      bufio.NewReaderSize(rw, app.ReadBufSize),
-		pool:        app.Pool,
-		maxRecvSize: app.MaxRecvSize,
-		maxSendSize: app.MaxSendSize,
-		newMessage:  newMessage,
+		app:        app,
+		conn:       rw.(net.Conn),
+		reader:     bufio.NewReaderSize(rw, app.ReadBufSize),
+		newMessage: newMessage,
 	}
 	c.headBuf = c.headData[:]
 	return c
@@ -55,14 +53,12 @@ func (app *App) newResponse(serviceID, messageID byte) (Message, error) {
 const packetHeadSize = 4 + 2
 
 type codec struct {
-	headBuf     []byte
-	headData    [packetHeadSize]byte
-	conn        net.Conn
-	reader      *bufio.Reader
-	pool        slab.Pool
-	maxRecvSize int
-	maxSendSize int
-	newMessage  func(byte, byte) (Message, error)
+	app        *App
+	headBuf    []byte
+	headData   [packetHeadSize]byte
+	conn       net.Conn
+	reader     *bufio.Reader
+	newMessage func(byte, byte) (Message, error)
 }
 
 func (c *codec) Conn() net.Conn {
@@ -70,17 +66,22 @@ func (c *codec) Conn() net.Conn {
 }
 
 func (c *codec) Receive() (msg interface{}, err error) {
+	if c.app.RecvTimeout > 0 {
+		c.conn.SetReadDeadline(time.Now().Add(c.app.RecvTimeout))
+		defer c.conn.SetReadDeadline(time.Time{})
+	}
+
 	if _, err = io.ReadFull(c.reader, c.headBuf); err != nil {
 		return
 	}
 
 	packetSize := int(binary.LittleEndian.Uint32(c.headBuf))
 
-	if packetSize > c.maxRecvSize {
+	if packetSize > c.app.MaxRecvSize {
 		return nil, DecodeError{fmt.Sprintf("Too Large Receive Packet Size: %d", packetSize)}
 	}
 
-	packet := c.pool.Alloc(packetSize)
+	packet := c.app.Pool.Alloc(packetSize)
 
 	if _, err = io.ReadFull(c.reader, packet); err == nil {
 		msg1, err1 := c.newMessage(c.headData[4], c.headData[5])
@@ -99,7 +100,7 @@ func (c *codec) Receive() (msg interface{}, err error) {
 		}
 	}
 
-	c.pool.Free(packet)
+	c.app.Pool.Free(packet)
 	return
 }
 
@@ -108,11 +109,11 @@ func (c *codec) Send(m interface{}) (err error) {
 
 	packetSize := msg.BinarySize()
 
-	if packetSize > c.maxSendSize {
+	if packetSize > c.app.MaxSendSize {
 		panic(EncodeError{fmt.Sprintf("Too Large Send Packet Size: %d", packetSize)})
 	}
 
-	packet := c.pool.Alloc(packetHeadSize + packetSize)
+	packet := c.app.Pool.Alloc(packetHeadSize + packetSize)
 	binary.LittleEndian.PutUint32(packet, uint32(packetSize))
 	packet[4] = msg.ServiceID()
 	packet[5] = msg.MessageID()
@@ -126,8 +127,13 @@ func (c *codec) Send(m interface{}) (err error) {
 		msg.MarshalPacket(packet[packetHeadSize:])
 	}()
 
+	if c.app.SendTimeout > 0 {
+		c.conn.SetWriteDeadline(time.Now().Add(c.app.SendTimeout))
+		defer c.conn.SetWriteDeadline(time.Time{})
+	}
+
 	_, err = c.conn.Write(packet)
-	c.pool.Free(packet)
+	c.app.Pool.Free(packet)
 	return
 }
 
