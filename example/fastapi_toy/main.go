@@ -5,11 +5,8 @@ import (
 	"log"
 
 	"github.com/funny/fastapi"
-	"github.com/funny/fastbin"
-)
-
-import (
 	"github.com/funny/fastapi/example/fastapi_toy/module1"
+	"github.com/funny/fastbin"
 )
 
 func main() {
@@ -25,12 +22,13 @@ func main() {
 		return
 	}
 
-	err := app.ListenAndServe("tcp", "0.0.0.0:0")
+	server, err := app.Listen("tcp", "0.0.0.0:0")
 	if err != nil {
 		log.Fatal("setup server failed:", err)
 	}
+	go app.Serve(server, nil)
 
-	client, err := app.Dial("tcp", app.LastServerAddr().String())
+	client, err := app.Dial("tcp", server.Listener().Addr().String())
 	if err != nil {
 		log.Fatal("setup client failed:", err)
 	}
@@ -49,5 +47,5 @@ func main() {
 		log.Printf("AddRsp: %d", rsp.(*module1.AddRsp).C)
 	}
 
-	app.Stop()
+	server.Stop()
 }
