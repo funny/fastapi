@@ -12,6 +12,12 @@ import (
 	"github.com/funny/slab"
 )
 
+type Handler interface {
+	InitSession(*link.Session) error
+	DropSession(*link.Session)
+	Transaction(*link.Session, func())
+}
+
 type App struct {
 	serviceTypes []*ServiceType
 	services     [256]Provider
@@ -24,7 +30,6 @@ type App struct {
 	MaxSendSize  int
 	RecvTimeout  time.Duration
 	SendTimeout  time.Duration
-	Handler      Handler
 }
 
 func New() *App {
@@ -35,16 +40,47 @@ func New() *App {
 		SendChanSize: 1024,
 		MaxRecvSize:  64 * 1024,
 		MaxSendSize:  64 * 1024,
-		Handler:      &noHandler{},
 	}
 }
 
-func (app *App) HandleRequest(session *link.Session, req Message) {
-	app.services[req.ServiceID()].(Service).HandleRequest(session, req)
+func (app *App) handleSessoin(session *link.Session, handler Handler) {
+	defer session.Close()
+
+	if handler.InitSession(session) != nil {
+		return
+	}
+
+	defer handler.DropSession(session)
+
+	for {
+		msg, err := session.Receive()
+		if err != nil {
+			return
+		}
+
+		handler.Transaction(session, func() {
+			startTime := time.Now()
+			req := msg.(Message)
+			app.services[req.ServiceID()].(Service).HandleRequest(session, req)
+			app.timeRecoder.Record(req.Identity(), time.Since(startTime))
+		})
+	}
+}
+
+func (app *App) TimeRecoder() *pprof.TimeRecorder {
+	return app.timeRecoder
 }
 
 func (app *App) Dial(network, address string) (*link.Session, error) {
 	return link.Dial(network, address, link.ProtocolFunc(app.newClientCodec), app.SendChanSize)
+}
+
+func (app *App) Listen(network, address string, handler Handler) (*link.Server, error) {
+	listener, err := net.Listen(network, address)
+	if err != nil {
+		return nil, err
+	}
+	return app.NewServer(listener, handler), nil
 }
 
 func (app *App) NewClient(conn net.Conn) *link.Session {
@@ -52,21 +88,16 @@ func (app *App) NewClient(conn net.Conn) *link.Session {
 	return link.NewSession(codec, app.SendChanSize)
 }
 
-func (app *App) Listen(network, address string) (*link.Server, error) {
-	listener, err := net.Listen(network, address)
-	if err != nil {
-		return nil, err
+func (app *App) NewServer(listener net.Listener, handler Handler) *link.Server {
+	if handler == nil {
+		handler = &noHandler{}
 	}
-	return app.NewServer(listener), nil
-}
-
-func (app *App) NewServer(listener net.Listener) *link.Server {
-	return link.NewServer(listener, link.ProtocolFunc(app.newServerCodec), app.SendChanSize)
-}
-
-func (app *App) NewFastwayServer(conn net.Conn, cfg fastway.EndPointCfg) (*fastway.EndPoint, error) {
-	cfg.MsgFormat = &msgFormat{app.newRequest}
-	return fastway.NewServer(conn, cfg)
+	return link.NewServer(
+		listener, link.ProtocolFunc(app.newServerCodec), app.SendChanSize,
+		link.HandlerFunc(func(session *link.Session) {
+			app.handleSessoin(session, handler)
+		}),
+	)
 }
 
 func (app *App) NewFastwayClient(conn net.Conn, cfg fastway.EndPointCfg) *fastway.EndPoint {
@@ -74,10 +105,40 @@ func (app *App) NewFastwayClient(conn net.Conn, cfg fastway.EndPointCfg) *fastwa
 	return fastway.NewClient(conn, cfg)
 }
 
-type Handler interface {
-	InitSession(*link.Session) error
-	DropSession(*link.Session)
-	Transaction(*link.Session, func())
+func (app *App) NewFastwayServer(conn net.Conn, cfg fastway.EndPointCfg, handler Handler) (*FastwayServer, error) {
+	cfg.MsgFormat = &msgFormat{app.newRequest}
+	endpoint, err := fastway.NewServer(conn, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if handler == nil {
+		handler = &noHandler{}
+	}
+	return &FastwayServer{app, endpoint, handler}, nil
+}
+
+type FastwayServer struct {
+	app      *App
+	endpoint *fastway.EndPoint
+	handler  Handler
+}
+
+func (s *FastwayServer) Serve() error {
+	for {
+		session, err := s.endpoint.Accept()
+		if err != nil {
+			return err
+		}
+		go s.app.handleSessoin(session, s.handler)
+	}
+}
+
+func (s *FastwayServer) GetSession(sessionID uint64) *link.Session {
+	return s.endpoint.GetSession(sessionID)
+}
+
+func (s *FastwayServer) Stop() {
+	s.endpoint.Close()
 }
 
 type noHandler struct {
@@ -98,54 +159,4 @@ func (t *noHandler) Transaction(session *link.Session, work func()) {
 		}
 	}()
 	work()
-}
-
-func (app *App) HandleSessoin(session *link.Session, handler Handler) {
-	defer session.Close()
-
-	if handler.InitSession(session) != nil {
-		return
-	}
-
-	defer handler.DropSession(session)
-
-	for {
-		msg, err := session.Receive()
-		if err != nil {
-			return
-		}
-
-		handler.Transaction(session, func() {
-			startTime := time.Now()
-			msg2 := msg.(Message)
-			app.HandleRequest(session, msg2)
-			app.timeRecoder.Record(msg2.Identity(), time.Since(startTime))
-		})
-	}
-}
-
-func (app *App) Serve(server *link.Server, handler Handler) {
-	if handler == nil {
-		handler = &noHandler{}
-	}
-	server.Serve(link.HandlerFunc(func(session *link.Session) {
-		app.HandleSessoin(session, handler)
-	}))
-}
-
-func (app *App) ServeFastway(endpoint *fastway.EndPoint, handler Handler) {
-	if handler == nil {
-		handler = &noHandler{}
-	}
-	for {
-		session, err := endpoint.Accept()
-		if err != nil {
-			return
-		}
-		go app.HandleSessoin(session.Session, handler)
-	}
-}
-
-func (app *App) TimeRecoder() *pprof.TimeRecorder {
-	return app.timeRecoder
 }

@@ -23,11 +23,11 @@ func main() {
 		return
 	}
 
-	server, err := app.Listen("tcp", "0.0.0.0:0")
+	server, err := app.Listen("tcp", "0.0.0.0:0", nil)
 	if err != nil {
 		log.Fatal("setup server failed:", err)
 	}
-	go app.Serve(server, nil)
+	go server.Serve()
 
 	client, err := app.Dial("tcp", server.Listener().Addr().String())
 	if err != nil {
