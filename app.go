@@ -15,7 +15,7 @@ import (
 type Handler interface {
 	InitSession(*link.Session) error
 	DropSession(*link.Session)
-	Transaction(*link.Session, func())
+	Transaction(*link.Session, Message, func())
 }
 
 type App struct {
@@ -58,9 +58,9 @@ func (app *App) handleSessoin(session *link.Session, handler Handler) {
 			return
 		}
 
-		handler.Transaction(session, func() {
+		req := msg.(Message)
+		handler.Transaction(session, req, func() {
 			startTime := time.Now()
-			req := msg.(Message)
 			app.services[req.ServiceID()].(Service).HandleRequest(session, req)
 			app.timeRecoder.Record(req.Identity(), time.Since(startTime))
 		})
@@ -151,10 +151,10 @@ func (t *noHandler) InitSession(session *link.Session) error {
 	return nil
 }
 
-func (t *noHandler) Transaction(session *link.Session, work func()) {
+func (t *noHandler) Transaction(session *link.Session, req Message, work func()) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Println("Unhandled fastapi error:", err)
+			log.Printf("fastapi: unhandled panic when processing '%s' - '%s'", req.Identity(), err)
 			log.Println(string(debug.Stack()))
 		}
 	}()
