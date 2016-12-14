@@ -146,13 +146,13 @@ type msgFormat struct {
 }
 
 func (f *msgFormat) EncodeMessage(msg interface{}) (buf []byte, err error) {
+	msg2 := msg.(Message)
 	defer func() {
 		if panicErr := recover(); panicErr != nil {
 			buf = nil
 			err = EncodeError{panicErr}
 		}
 	}()
-	msg2 := msg.(Message)
 	buf = make([]byte, 2+msg2.BinarySize())
 	buf[0] = msg2.ServiceID()
 	buf[1] = msg2.MessageID()
