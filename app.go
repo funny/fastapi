@@ -14,7 +14,6 @@ import (
 
 type Handler interface {
 	InitSession(*link.Session) error
-	DropSession(*link.Session)
 	Transaction(*link.Session, Message, func())
 }
 
@@ -49,8 +48,6 @@ func (app *App) handleSessoin(session *link.Session, handler Handler) {
 	if handler.InitSession(session) != nil {
 		return
 	}
-
-	defer handler.DropSession(session)
 
 	for {
 		msg, err := session.Receive()
