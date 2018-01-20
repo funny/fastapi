@@ -98,7 +98,7 @@ func (app *App) NewServer(listener net.Listener, handler Handler) *link.Server {
 }
 
 func (app *App) NewFastwayClient(conn net.Conn, cfg fastway.EndPointCfg) *fastway.EndPoint {
-	cfg.MsgFormat = &msgFormat{app.newRequest}
+	cfg.MsgFormat = &msgFormat{app.newResponse}
 	return fastway.NewClient(conn, cfg)
 }
 
